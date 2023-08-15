@@ -1,3 +1,5 @@
 /downloaded_images
 /node_modules
 .env.local
+all_articles.json
+image_urls.txt
