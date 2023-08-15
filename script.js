@@ -3,31 +3,31 @@ const fs = require('fs')
 const cheerio = require('cheerio')
 const path = require('path')
 const https = require('https')
+const sharp = require('sharp')
+const dotenv = require('dotenv').config({ path: '.env.local' })
 
-const shop = 'hosstoolsstore.myshopify.com'
-const accessToken = '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'
+const shop = process.env.SHOP_NAME
+const accessToken = process.env.API_KEY
 
-// Reusable function to make Shopify API requests
-function makeShopifyRequest(urlPath, callback) {
-  const requestOptions = {
-    url: `https://${shop}/admin/api/2023-01/${urlPath}`,
-    headers: {
-      'X-Shopify-Access-Token': accessToken,
-    },
-  }
-
-  // Make the request
-  request(requestOptions, (error, response, body) => {
-    if (!error && response.statusCode === 200) {
-      // If successful, parse the body and call the provided callback
-      callback(JSON.parse(body))
-    } else {
-      console.error('Request failed')
+function makeShopifyRequest(urlPath) {
+  return new Promise((resolve, reject) => {
+    const requestOptions = {
+      url: `https://${shop}/admin/api/2023-01/${urlPath}`,
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+      },
     }
+
+    request(requestOptions, (error, response, body) => {
+      if (!error && response.statusCode === 200) {
+        resolve(JSON.parse(body))
+      } else {
+        reject(error || 'Request failed')
+      }
+    })
   })
 }
 
-// Function to extract URLs from img tags
 function extractImageUrlsFromHtml(html) {
   const $ = cheerio.load(html)
   const imgUrls = []
@@ -35,63 +35,114 @@ function extractImageUrlsFromHtml(html) {
   $('img').each((index, element) => {
     const src = $(element).attr('src')
     if (src) {
-      imgUrls.push(src.replace('https://hosstools.com/', 'https://hoss.slightsites.com/'))
+      const imageUrlWithoutDimensions = src.replace(/(-\d+x\d+)?(\.\w+)$/, '$2')
+      imgUrls.push(imageUrlWithoutDimensions.replace('https://hosstools.com/', 'https://hoss.slightsites.com/'))
     }
   })
 
   return imgUrls
 }
 
-// Retrieve all blogs
-makeShopifyRequest('blogs.json', ({ blogs }) => {
-  // Filter blogs with the handle 'study-hall'
+async function optimizeImage(inputPath, outputPath) {
+  try {
+    await sharp(inputPath).resize({ width: 800 }).toFile(outputPath)
+  } catch (err) {
+    console.error('Error optimizing image:', err)
+    console.log('Input path:', inputPath)
+  }
+}
+
+async function processBlogs() {
+  const { blogs } = await makeShopifyRequest('blogs.json')
   const studyHallBlogs = blogs.filter((blog) => blog.handle === 'study-hall')
 
-  // Set to store unique image URLs
   const uniqueImageUrls = new Set()
-
-  // Counter to keep track of processed blogs
   let processedBlogs = 0
 
-  // Iterate through study hall blogs
-  studyHallBlogs.forEach((blog) => {
-    // Retrieve articles for each study hall blog
-    makeShopifyRequest(`blogs/${blog.id}/articles.json?limit=250`, ({ articles }) => {
-      articles.forEach((article) => {
-        const imageUrls = extractImageUrlsFromHtml(article.body_html)
-        imageUrls.forEach((imageUrl) => {
-          uniqueImageUrls.add(imageUrl) // Add to the set to ensure uniqueness
-        })
+  const originalImageFolder = 'downloaded_images/original'
+  const optimizedImageFolder = 'downloaded_images/optimized'
+
+  // Delete pre-existing files
+  function deleteExistingFiles(folder) {
+    if (fs.existsSync(folder)) {
+      fs.readdirSync(folder).forEach((file) => {
+        fs.unlinkSync(path.join(folder, file))
       })
+    }
+  }
 
-      // Check if all blogs have been processed
-      processedBlogs++
-      if (processedBlogs === studyHallBlogs.length) {
-        const allImageUrls = [...uniqueImageUrls] // Convert Set to an array
+  deleteExistingFiles(originalImageFolder)
+  deleteExistingFiles(optimizedImageFolder)
 
-        // Write all image URLs to a text file
-        fs.writeFileSync('image_urls.txt', allImageUrls.join('\n'))
-        console.log('Image URLs saved to image_urls.txt')
+  // Create folders if they don't exist
+  function createFolderIfNotExists(folder) {
+    if (!fs.existsSync(folder)) {
+      fs.mkdirSync(folder, { recursive: true })
+    }
+  }
 
-        // Create a folder to save images
-        const imageFolder = 'downloaded_images'
-        if (!fs.existsSync(imageFolder)) {
-          fs.mkdirSync(imageFolder)
-        }
+  createFolderIfNotExists(originalImageFolder)
+  createFolderIfNotExists(optimizedImageFolder)
 
-        // Download all images
-        allImageUrls.forEach((imageUrl) => {
+  for (const blog of studyHallBlogs) {
+    const { articles } = await makeShopifyRequest(`blogs/${blog.id}/articles.json?limit=250`)
+
+    for (const article of articles) {
+      const imageUrls = extractImageUrlsFromHtml(article.body_html)
+      imageUrls.forEach((imageUrl) => uniqueImageUrls.add(imageUrl))
+    }
+
+    processedBlogs++
+
+    if (processedBlogs === studyHallBlogs.length) {
+      const allImageUrls = [...uniqueImageUrls]
+      fs.writeFileSync('image_urls.txt', allImageUrls.join('\n'))
+      console.log('Image URLs saved to image_urls.txt')
+
+      try {
+        const downloadPromises = allImageUrls.map(async (imageUrl) => {
           const filename = path.basename(imageUrl)
-          const imagePath = path.join(imageFolder, filename)
+          const originalImagePath = path.join(originalImageFolder, filename)
+          const optimizedImagePath = path.join(
+            optimizedImageFolder,
+            `${filename.replace(/\.\w+$/, '')}--optimized${path.extname(filename)}`
+          )
 
-          const file = fs.createWriteStream(imagePath)
-          https.get(imageUrl, (response) => {
-            response.pipe(file)
+          const originalFile = fs.createWriteStream(originalImagePath)
+
+          await new Promise((resolve, reject) => {
+            https
+              .get(imageUrl, (response) => {
+                response.pipe(originalFile)
+                response.on('end', resolve)
+              })
+              .on('error', (error) => {
+                console.error('Error downloading image:', error)
+                reject(error)
+              })
           })
+
+          return { originalImagePath, optimizedImagePath }
         })
 
-        console.log('All images downloaded to the "downloaded_images" folder')
+        const imagePaths = await Promise.all(downloadPromises)
+
+        await Promise.all(
+          imagePaths.map(({ originalImagePath, optimizedImagePath }) =>
+            optimizeImage(originalImagePath, optimizedImagePath)
+          )
+        )
+
+        const originalFileCount = fs.readdirSync(originalImageFolder).length
+        const optimizedFileCount = fs.readdirSync(optimizedImageFolder).length
+        console.log(`Total original files: ${originalFileCount}`)
+        console.log(`Total optimized files: ${optimizedFileCount}`)
+        console.log('All images downloaded and optimized to the "downloaded_images" folder')
+      } catch (error) {
+        console.error('Error during download and optimization:', error)
       }
-    })
-  })
-})
+    }
+  }
+}
+
+processBlogs()
