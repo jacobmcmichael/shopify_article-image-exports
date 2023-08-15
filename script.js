@@ -1,17 +1,11 @@
-const dotenv = require('dotenv').config({ path: '.env.local' })
 const request = require('request')
 const fs = require('fs')
 const cheerio = require('cheerio')
 const path = require('path')
 const https = require('https')
 
-// Define the environment variables in a .env.local file
-const shop = process.env.SHOP_NAME
-const accessToken = process.env.API_KEY
-
-console.log('Starting script...')
-console.log(`SHOP_NAME: ${shop}`)
-console.log(`API_KEY: ${accessToken}`)
+const shop = 'hosstoolsstore.myshopify.com'
+const accessToken = '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'
 
 // Reusable function to make Shopify API requests
 function makeShopifyRequest(urlPath, callback) {
@@ -53,8 +47,8 @@ makeShopifyRequest('blogs.json', ({ blogs }) => {
   // Filter blogs with the handle 'study-hall'
   const studyHallBlogs = blogs.filter((blog) => blog.handle === 'study-hall')
 
-  // Array to store all image URLs
-  const allImageUrls = []
+  // Set to store unique image URLs
+  const uniqueImageUrls = new Set()
 
   // Counter to keep track of processed blogs
   let processedBlogs = 0
@@ -65,12 +59,16 @@ makeShopifyRequest('blogs.json', ({ blogs }) => {
     makeShopifyRequest(`blogs/${blog.id}/articles.json`, ({ articles }) => {
       articles.forEach((article) => {
         const imageUrls = extractImageUrlsFromHtml(article.body_html)
-        allImageUrls.push(...imageUrls)
+        imageUrls.forEach((imageUrl) => {
+          uniqueImageUrls.add(imageUrl) // Add to the set to ensure uniqueness
+        })
       })
 
       // Check if all blogs have been processed
       processedBlogs++
       if (processedBlogs === studyHallBlogs.length) {
+        const allImageUrls = [...uniqueImageUrls] // Convert Set to an array
+
         // Write all image URLs to a text file
         fs.writeFileSync('image_urls.txt', allImageUrls.join('\n'))
         console.log('Image URLs saved to image_urls.txt')
@@ -83,7 +81,7 @@ makeShopifyRequest('blogs.json', ({ blogs }) => {
 
         // Download all images
         allImageUrls.forEach((imageUrl) => {
-          const filename = path.basename(imageUrl) // Get the filename from the URL
+          const filename = path.basename(imageUrl)
           const imagePath = path.join(imageFolder, filename)
 
           const file = fs.createWriteStream(imagePath)
