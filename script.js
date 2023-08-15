@@ -56,7 +56,7 @@ makeShopifyRequest('blogs.json', ({ blogs }) => {
   // Iterate through study hall blogs
   studyHallBlogs.forEach((blog) => {
     // Retrieve articles for each study hall blog
-    makeShopifyRequest(`blogs/${blog.id}/articles.json`, ({ articles }) => {
+    makeShopifyRequest(`blogs/${blog.id}/articles.json?limit=250`, ({ articles }) => {
       articles.forEach((article) => {
         const imageUrls = extractImageUrlsFromHtml(article.body_html)
         imageUrls.forEach((imageUrl) => {
