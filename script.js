@@ -30,17 +30,24 @@ function makeShopifyRequest(urlPath) {
 
 function extractImageUrlsFromHtml(html) {
   const $ = cheerio.load(html)
-  const imgUrls = []
+  const imgUrlsWithDimensions = []
+  const imgUrlsWithoutDimensions = []
 
   $('img').each((index, element) => {
     const src = $(element).attr('src')
     if (src) {
+      const imageUrlWithDimensions = src
       const imageUrlWithoutDimensions = src.replace(/(-\d+x\d+)?(\.\w+)$/, '$2')
-      imgUrls.push(imageUrlWithoutDimensions.replace('https://hosstools.com/', 'https://hoss.slightsites.com/'))
+      imgUrlsWithDimensions.push(
+        imageUrlWithDimensions.replace('https://hosstools.com/', 'https://hoss.slightsites.com/')
+      )
+      imgUrlsWithoutDimensions.push(
+        imageUrlWithoutDimensions.replace('https://hosstools.com/', 'https://hoss.slightsites.com/')
+      )
     }
   })
 
-  return imgUrls
+  return [imgUrlsWithDimensions, imgUrlsWithoutDimensions]
 }
 
 async function optimizeImage(inputPath, outputPath) {
@@ -56,7 +63,8 @@ async function processBlogs() {
   const { blogs } = await makeShopifyRequest('blogs.json')
   const studyHallBlogs = blogs.filter((blog) => blog.handle === 'study-hall')
 
-  const uniqueImageUrls = new Set()
+  const uniqueImageUrlsWithDimensions = new Set()
+  const uniqueImageUrlsWithoutDimensions = new Set()
   let processedBlogs = 0
 
   const originalImageFolder = 'downloaded_images/original'
@@ -88,19 +96,22 @@ async function processBlogs() {
     const { articles } = await makeShopifyRequest(`blogs/${blog.id}/articles.json?limit=250`)
 
     for (const article of articles) {
-      const imageUrls = extractImageUrlsFromHtml(article.body_html)
-      imageUrls.forEach((imageUrl) => uniqueImageUrls.add(imageUrl))
+      const [imgUrlsWithDimensions, imgUrlsWithoutDimensions] = extractImageUrlsFromHtml(article.body_html)
+      imgUrlsWithDimensions.forEach((imageUrl) => uniqueImageUrlsWithDimensions.add(imageUrl))
+      imgUrlsWithoutDimensions.forEach((imageUrl) => uniqueImageUrlsWithoutDimensions.add(imageUrl))
     }
 
     processedBlogs++
 
     if (processedBlogs === studyHallBlogs.length) {
-      const allImageUrls = [...uniqueImageUrls]
-      fs.writeFileSync('image_urls.txt', allImageUrls.join('\n'))
-      console.log('Image URLs saved to image_urls.txt')
+      const allImageUrlsWithDimensions = [...uniqueImageUrlsWithDimensions]
+      const allImageUrlsWithoutDimensions = [...uniqueImageUrlsWithoutDimensions]
+      fs.writeFileSync('image_urls_with_dimensions.txt', allImageUrlsWithDimensions.join('\n'))
+      fs.writeFileSync('image_urls_without_dimensions.txt', allImageUrlsWithoutDimensions.join('\n'))
+      console.log('Image URLs saved to text files')
 
       try {
-        const downloadPromises = allImageUrls.map(async (imageUrl) => {
+        const downloadPromises = allImageUrlsWithoutDimensions.map(async (imageUrl) => {
           const filename = path.basename(imageUrl)
           const originalImagePath = path.join(originalImageFolder, filename)
           const optimizedImagePath = path.join(
