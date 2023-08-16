@@ -52,7 +52,17 @@ function extractImageUrlsFromHtml(html) {
 
 async function optimizeImage(inputPath, outputPath) {
   try {
-    await sharp(inputPath).resize({ width: 800 }).toFile(outputPath)
+    const image = sharp(inputPath).resize({ kernel: 'lanczos3', width: 800, withoutEnlargement: true })
+
+    const extension = inputPath.split('.').pop().toLowerCase()
+    if (extension === 'jpg' || extension === 'jpeg') {
+      await image.jpeg({ quality: 80 }).toFile(outputPath)
+    } else if (extension === 'png') {
+      await image.png({ compressionLevel: 6 }).toFile(outputPath)
+    } else {
+      // If the file extension is not recognized, perform a default operation
+      await image.toFile(outputPath)
+    }
   } catch (err) {
     console.error('Error optimizing image:', err)
     console.log('Input path:', inputPath)
