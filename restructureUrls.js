@@ -1,7 +1,7 @@
 const fs = require('fs')
 
 // Read the text file containing the URLs
-const inputFile = 'image_urls_with_dimensions.txt'
+const inputFile = 'image_urls_without_dimensions.txt'
 const outputFile = 'image_urls_restructured.txt'
 const cdnBaseUrl = 'https://cdn.shopify.com/s/files/1/0745/1957/6886/files/'
 
@@ -18,12 +18,11 @@ fs.readFile(inputFile, 'utf8', (err, data) => {
     const parts = url.split('/')
     const fileNameWithExtension = parts.pop()
     const fileHandle = fileNameWithExtension.split('.')[0]
+    const fileExtension = fileNameWithExtension.split('.')[1]
 
-    const optimizedUrl = url.replace(
-      fileNameWithExtension,
-      fileHandle + '--optimized' + '.' + fileNameWithExtension.split('.').pop()
-    )
-    const shopifyCdnUrl = cdnBaseUrl + fileNameWithExtension
+    const optimizedFileName = fileHandle + '--optimized.' + fileExtension
+    const optimizedUrl = url.replace(fileNameWithExtension, optimizedFileName)
+    const shopifyCdnUrl = cdnBaseUrl + optimizedFileName
 
     return shopifyCdnUrl
   })
