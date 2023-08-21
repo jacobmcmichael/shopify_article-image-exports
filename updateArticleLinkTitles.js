@@ -1,6 +1,7 @@
 import fetch from 'node-fetch';
 import fs from 'fs';
 import request from 'request';
+import cheerio from 'cheerio';
 import dotenv from 'dotenv';
 
 dotenv.config({ path: '.env.local'});
@@ -43,7 +44,7 @@ async function fetchBlogsWithHandle(handle) {
 
 async function fetchUnpublishedArticles(blogId) {
   try {
-    const articles = await makeShopifyRequest(`blogs/${blogId}/articles.json?limit=1&status=unpublished`);
+    const articles = await makeShopifyRequest(`blogs/${blogId}/articles.json?limit=250&status=unpublished`);
     return articles.articles;
   } catch (error) {
     console.error(`Error fetching unpublished articles: ${error}`);
@@ -57,22 +58,26 @@ async function updateArticleLinkTitles() {
     if (studyHallBlog) {
       const blogId = studyHallBlog.id;
       const unpublishedArticles = await fetchUnpublishedArticles(blogId);
-
-      // Save fetched articles to a JSON file
-      fs.writeFileSync('fetched_articles.json', JSON.stringify(unpublishedArticles, null, 2));
-
       const updatedArticles = [];
 
       for (const article of unpublishedArticles) {
         const { id, body_html } = article;
-        const anchorRegex = /(<a\s+[^>]*href=)(["'])(.*?)\2([^>]*>)(.*?)<\/a>/g;
+        const $ = cheerio.load(body_html); // Load the HTML content into cheerio
 
-        const updatedBodyHtml = body_html.replace(anchorRegex, (match, startTag, quote, href, middle, text) => {
-          const title = text || middle || href.split('/').filter(Boolean).pop().replace(/-/g, ' ');
-          return `${startTag}${quote}${href}${quote} title="${title}"${middle}${text}</a>`;
+        $('a').each((index, element) => {
+          const $anchor = $(element);
+          const href = $anchor.attr('href');
+          const text = $anchor.text();
+
+          if (href) {
+            const urlSegments = href.split('/').filter(Boolean);
+            const title = urlSegments[urlSegments.length - 1].replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+            $anchor.attr('title', title); // Set the title attribute
+          }
         });
 
-        updatedArticles.push({ ...article, body_html: updatedBodyHtml });
+        updatedArticles.push({ ...article, body_html: $.html() }); // Updated HTML content
       }
 
       fs.writeFileSync('updated_articles.json', JSON.stringify(updatedArticles, null, 2));
