@@ -1,4 +1,4 @@
 /downloaded_images
 /node_modules
 .env.local
-*.json
+/*.json
