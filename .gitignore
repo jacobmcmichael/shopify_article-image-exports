@@ -1,6 +1,4 @@
 /downloaded_images
 /node_modules
 .env.local
-all_articles.json
-image_urls_with_dimensions.txt
-image_urls_without_dimensions.txt
+*.json
