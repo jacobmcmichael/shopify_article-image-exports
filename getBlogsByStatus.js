@@ -1,15 +1,10 @@
-import request from 'request';
-import fs from 'fs';
-import cheerio from 'cheerio';
-import path from 'path';
-import https from 'https';
-import sharp from 'sharp';
-import dotenv from 'dotenv';
+import request from 'request'
+import dotenv from 'dotenv'
 
-dotenv.config({ path: '.env.local' });
+dotenv.config({ path: '.env.local' })
 
-const shop = process.env.SHOP_NAME;
-const accessToken = process.env.API_KEY;
+const shop = process.env.SHOP_NAME
+const accessToken = process.env.API_KEY
 
 function makeShopifyRequest(urlPath) {
   return new Promise((resolve, reject) => {
@@ -18,53 +13,53 @@ function makeShopifyRequest(urlPath) {
       headers: {
         'X-Shopify-Access-Token': accessToken,
       },
-    };
+    }
 
-    console.log(requestOptions.url);
+    console.log(requestOptions.url)
 
     request(requestOptions, (error, response, body) => {
       if (!error && response.statusCode === 200) {
-        resolve(JSON.parse(body));
+        resolve(JSON.parse(body))
       } else {
-        reject(error || 'Request failed');
+        reject(error || 'Request failed')
       }
-    });
-  });
+    })
+  })
 }
 
 async function fetchArticlesStatus(id) {
   try {
     if (!id) {
-      console.log('No ID provided to fetch unpublished articles.');
-      return;
+      console.log('No ID provided to fetch unpublished articles.')
+      return
     }
 
-    const allArticles = await makeShopifyRequest(`blogs/${id}/articles/count.json?published_status=any`);
-    const publishedArticles = await makeShopifyRequest(`blogs/${id}/articles/count.json?published_status=published`);
-    const unpublishedArticles = await makeShopifyRequest(`blogs/${id}/articles/count.json?published_status=unpublished`);
+    const allArticles = await makeShopifyRequest(`blogs/${id}/articles/count.json?published_status=any`)
+    const publishedArticles = await makeShopifyRequest(`blogs/${id}/articles/count.json?published_status=published`)
+    const unpublishedArticles = await makeShopifyRequest(`blogs/${id}/articles/count.json?published_status=unpublished`)
 
-    console.log('All Articles:', allArticles);
-    console.log('Published Articles:', publishedArticles);
-    console.log('Unpublished Articles:', unpublishedArticles);
+    console.log('All Articles:', allArticles)
+    console.log('Published Articles:', publishedArticles)
+    console.log('Unpublished Articles:', unpublishedArticles)
   } catch (error) {
-    console.log('Error fetching unpublished articles:', error);
+    console.log('Error fetching unpublished articles:', error)
   }
 }
 
 async function fetchBlogs() {
   try {
-    const { blogs } = await makeShopifyRequest('blogs.json');
-    const studyHallBlog = blogs.find((blog) => blog.handle === 'study-hall');
-    
+    const { blogs } = await makeShopifyRequest('blogs.json')
+    const studyHallBlog = blogs.find((blog) => blog.handle === 'study-hall')
+
     if (studyHallBlog) {
-      console.log(studyHallBlog.id);
-      fetchArticlesStatus(studyHallBlog.id);
+      console.log(studyHallBlog.id)
+      fetchArticlesStatus(studyHallBlog.id)
     } else {
-      console.log('Study hall blog not found.');
+      console.log('Study hall blog not found.')
     }
   } catch (error) {
-    console.log('Error:', error);
+    console.log('Error:', error)
   }
 }
 
-fetchBlogs();
+fetchBlogs()
