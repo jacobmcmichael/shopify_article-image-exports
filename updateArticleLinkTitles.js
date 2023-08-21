@@ -52,12 +52,21 @@ async function fetchUnpublishedArticles(blogId) {
   }
 }
 
+async function backupArticles(articles, filename) {
+  const backup = JSON.stringify(articles)
+  fs.writeFileSync(filename, backup)
+}
+
 async function updateArticleLinkTitles() {
   try {
     const studyHallBlog = await fetchBlogsWithHandle('study-hall')
     if (studyHallBlog) {
       const blogId = studyHallBlog.id
       const unpublishedArticles = await fetchUnpublishedArticles(blogId)
+      const backupFilename = 'articles_backup.json'
+
+      await backupArticles(unpublishedArticles, backupFilename)
+
       const updatedArticles = []
       const uniqueUrls = new Set()
 
@@ -68,7 +77,6 @@ async function updateArticleLinkTitles() {
         $('a').each((index, element) => {
           const $anchor = $(element)
           const href = $anchor.attr('href')
-          const text = $anchor.text()
 
           if (href) {
             uniqueUrls.add(href)
@@ -83,13 +91,10 @@ async function updateArticleLinkTitles() {
         urlMap[url] = ''
       }
 
-      fs.writeFileSync('url_map.json', JSON.stringify(urlMap, null, 2))
-
-      return updatedArticles
+      await backupArticles(updatedArticles, backupFilename)
     }
   } catch (error) {
-    console.error(`Error updating article link titles: ${error}`)
-    return null
+    console.error(error)
   }
 }
 
